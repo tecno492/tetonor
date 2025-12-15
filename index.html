@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetonor - El Juego de Lógica</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>TETONOR</h1>
+            <p class="subtitle">Desafía tu mente. Encuentra los pares.</p>
+        </header>
+
+        <main>
+            <div class="game-info">
+                <div class="score-board">
+                    <span>Pares Encontrados: <strong id="score">0</strong>/16</span>
+                </div>
+                <button id="new-game-btn" class="primary-btn">Nuevo Juego</button>
+            </div>
+
+            <div class="difficulty-container">
+                <button class="diff-btn active" data-level="easy">Fácil</button>
+                <button class="diff-btn" data-level="medium">Medio</button>
+                <button class="diff-btn" data-level="hard">Difícil</button>
+                <button class="diff-btn" data-level="pro">Pro</button>
+            </div>
+
+            <div class="game-board-container">
+                <div class="grid-label">TABLERO</div>
+                <div id="grid" class="game-grid">
+                    <!-- Grid items will be generated here -->
+                </div>
+            </div>
+
+            <div class="strip-container">
+                <div class="strip-label">TIRA DE NÚMEROS (Selecciona 2)</div>
+                <div id="strip" class="number-strip">
+                    <!-- Strip numbers will be generated here -->
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>¡Felicidades!</h2>
+            <p>Has completado el tablero.</p>
+            <button id="modal-restart-btn" class="primary-btn">Jugar de Nuevo</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
