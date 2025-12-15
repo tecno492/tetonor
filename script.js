@@ -22,23 +22,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Game State
         let pairsFound = 0;
-        let currentRoundScore = 0; // Accumulated score for this round
-        let totalScore = 0; // Total score if we allowed multiple rounds (but requirements say "update when complete panel")
-        // We will use this to track the "pending" score that gets committed to High Score?
+        let currentRoundScore = 0;
         let mistakes = 0;
-        let startTime = 0; // Timestamp when pair selection started (or game started)
+        let startTime = 0;
+        let foundExtraSolutions = new Set(); // Store hashes of found extra solutions to prevent farming
 
         // Game Config
         let currentLevel = 'easy';
         const TOTAL_PAIRS = 8;
-        let selectedGridIndex = -1;
         const MAX_MISTAKES = 3;
 
         const DIFFICULTY_RANGES = {
-            'easy': { min: 1, max: 15, multi: 1 },
+            'easy': { min: 1, max: 12, multi: 1 },
             'medium': { min: 1, max: 20, multi: 2 },
-            'hard': { min: 1, max: 50, multi: 3 },
-            'pro': { min: 1, max: 50, multi: 3.5 }
+            'hard': { min: 1, max: 50, multi: 4 }
         };
 
         function initGame() {
@@ -48,16 +45,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 gridValues = [];
                 stripValues = [];
                 selectedStripIndices = [];
-                selectedGridIndex = -1;
                 pairsFound = 0;
                 currentRoundScore = 0;
                 mistakes = 0;
+                foundExtraSolutions = new Set();
 
                 updateUI();
                 if (modal) modal.classList.add('hidden');
-
-                const oldInputModal = document.getElementById('pro-input-modal');
-                if (oldInputModal) oldInputModal.remove();
 
                 const range = DIFFICULTY_RANGES[currentLevel];
                 if (!range) throw new Error("Invalid level config: " + currentLevel);
@@ -67,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 console.log("Generating Pairs for level:", currentLevel, range);
 
-                // Generate Puzzle with Smart Repair Strategy
+                // Generate Puzzle with Relaxed Repair Strategy
                 gridValues = [];
                 stripValues = [];
                 let attempts = 0;
@@ -78,17 +72,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentPairs.push(generateRandomPair(range, i));
                 }
 
-                while (attempts < 1000000) {
+                while (attempts < 100) {
                     attempts++;
 
-                    // Build temporary structures for validation
                     const tempGrid = [];
                     const tempStrip = [];
 
                     currentPairs.forEach(pair => {
                         const [a, b, id] = pair;
-                        tempGrid.push({ value: a + b, type: 'sum', pairId: id, solved: false });
-                        tempGrid.push({ value: a * b, type: 'product', pairId: id, solved: false });
+                        tempGrid.push({ value: a + b, type: 'sum', pairId: id, solved: false, solution: [a, b] });
+                        tempGrid.push({ value: a * b, type: 'product', pairId: id, solved: false, solution: [a, b] });
                         tempStrip.push({ value: a, pairId: id, used: false, id: tempStrip.length });
                         tempStrip.push({ value: b, pairId: id, used: false, id: tempStrip.length + 1 });
                     });
@@ -97,8 +90,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     const conflictPairIds = findConflicts(tempStrip, tempGrid);
 
                     if (conflictPairIds.length === 0) {
-                        // Success!
-                        console.log(`Puzzle Generated successfully after ${attempts} repairs.`);
+                        // Perfect puzzle
+                        console.log(`Puzzle Generated Cleanly after ${attempts} attempts.`);
+                        gridValues = shuffleArray(tempGrid);
+                        tempStrip.sort((x, y) => x.value - y.value);
+                        stripValues = tempStrip;
+                        break;
+                    }
+
+                    // If we reached max attempts, ACCEPT the puzzle even with conflicts
+                    if (attempts >= 100) {
+                        console.warn("Max attempts reached. Accepting puzzle with potential Ghost Solutions.");
                         gridValues = shuffleArray(tempGrid);
                         tempStrip.sort((x, y) => x.value - y.value);
                         stripValues = tempStrip;
@@ -106,7 +108,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     // Repair: Replace ONE of the conflicting pairs
-                    // Pick the first conflicting pair ID
                     const badId = conflictPairIds[0];
                     const index = currentPairs.findIndex(p => p[2] === badId);
                     if (index !== -1) {
@@ -115,10 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (gridValues.length === 0) {
-                    // Fallback: If strict validation fails (unlikely with 500 repairs), 
-                    // just use what we have but warn. Or maybe reduce pair count?
-                    // Let's just throw for now, but 500 iterations should be plenty.
-                    throw new Error("Could not generate a unique layout. Please try again.");
+                    throw new Error("Game Generation Failed.");
                 }
 
                 console.log("Render calling...", gridValues.length, stripValues.length);
@@ -137,14 +135,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function findConflicts(strip, grid) {
-            // Returns a list of pairIds that are causing conflicts (ghost solutions)
             const conflicts = new Set();
-
             for (let i = 0; i < strip.length; i++) {
                 for (let j = i + 1; j < strip.length; j++) {
                     const item1 = strip[i];
                     const item2 = strip[j];
-
                     if (item1.pairId === item2.pairId) continue;
 
                     const sum = item1.value + item2.value;
@@ -154,21 +149,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     const hasProd = grid.some(g => g.value === prod && g.type === 'product');
 
                     if (hasSum && hasProd) {
-                        // Conflict found involves these two items.
-                        // Mark BOTH pairs as problematic.
                         conflicts.add(item1.pairId);
                         conflicts.add(item2.pairId);
-                        // We can return early if we just want to fix one at a time
                         return Array.from(conflicts);
                     }
                 }
             }
             return Array.from(conflicts);
-        }
-
-        function unused_validatePuzzle(strip, grid) {
-            // ... deprecated ...
-            return true;
         }
 
         function render() {
@@ -177,16 +164,9 @@ document.addEventListener('DOMContentLoaded', () => {
             gridValues.forEach((item, index) => {
                 const cell = document.createElement('div');
                 let className = `grid-cell ${item.solved ? 'solved' : ''}`;
-                if (currentLevel === 'pro' && !item.solved) className += ' pro-mode';
-                if (index === selectedGridIndex) className += ' selected';
 
                 cell.className = className;
                 cell.textContent = item.value;
-
-                if (currentLevel === 'pro' && !item.solved) {
-                    cell.onclick = () => handleProGridClick(index);
-                }
-
                 gridEl.appendChild(cell);
             });
 
@@ -200,18 +180,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 btn.className = className;
                 btn.textContent = item.value;
-
-                if (currentLevel !== 'pro') {
-                    btn.onclick = () => handleStripClick(index);
-                } else {
-                    btn.onclick = () => handleProStripClick(index);
-                }
+                btn.onclick = () => handleStripClick(index);
 
                 stripEl.appendChild(btn);
             });
         }
-
-        // --- Standard Mode Logic ---
 
         function handleStripClick(index) {
             if (stripValues[index].used) return;
@@ -228,158 +201,117 @@ document.addEventListener('DOMContentLoaded', () => {
             render();
 
             if (selectedStripIndices.length === 2) {
-                setTimeout(checkStandardPair, 300);
+                setTimeout(checkPair, 300);
             }
         }
 
-        function checkStandardPair() {
+        function checkPair() {
             const idx1 = selectedStripIndices[0];
             const idx2 = selectedStripIndices[1];
             const val1 = stripValues[idx1].value;
             const val2 = stripValues[idx2].value;
+
+            // Sort selected values for comparison
+            const selectedVals = [val1, val2].sort((a, b) => a - b);
+            const pairHash = `${selectedVals[0]}-${selectedVals[1]}`;
 
             const sum = val1 + val2;
             const prod = val1 * val2;
 
+            console.log("--- DEBUG CHECK PAIR ---");
+            console.log(`Selected: ${val1} and ${val2}`);
+            console.log(`Calculated -> Sum: ${sum}, Product: ${prod}`);
+            console.log("Current Grid State:", JSON.parse(JSON.stringify(gridValues)));
+
+            // Find Grid cells that match the math
             const sumMatches = gridValues.filter(g => !g.solved && g.value === sum && g.type === 'sum');
             const prodMatches = gridValues.filter(g => !g.solved && g.value === prod && g.type === 'product');
 
+            console.log("Math Matches (Sum):", sumMatches);
+            console.log("Math Matches (Product):", prodMatches);
+
             if (sumMatches.length > 0 && prodMatches.length > 0) {
-                // Correct Match
-                sumMatches[0].solved = true;
-                prodMatches[0].solved = true;
-                stripValues[idx1].used = true;
-                stripValues[idx2].used = true;
-                pairsFound += 2; // Tracking solved cells (16 total)
+                // Math is valid. Now check if it's the "Intended" solution for any of these cells.
 
-                calculateScore();
+                let targetSumCell = null;
+                let targetProdCell = null;
 
-                selectedStripIndices = [];
-                checkWin();
-            } else {
-                handleMistake();
-                failFeedback();
-            }
-            render();
-        }
+                // Find a matching pair where the solution matches our values
+                for (const sCell of sumMatches) {
+                    const sol = [...sCell.solution].sort((a, b) => a - b);
+                    console.log(`Checking Sum Cell [${sCell.value}]: Expects [${sol.join(',')}] vs Selected [${selectedVals.join(',')}]`);
 
-        // --- Pro Mode Logic ---
-
-        function handleProGridClick(index) {
-            if (selectedGridIndex === index) {
-                selectedGridIndex = -1; // Deselect
-            } else {
-                selectedGridIndex = index;
-                selectedStripIndices = []; // Clear previous strip selections
-            }
-            render();
-        }
-
-        function handleProStripClick(index) {
-            if (selectedGridIndex === -1) {
-                alert("En modo Pro, primero selecciona una casilla del tablero.");
-                return;
-            }
-            if (stripValues[index].used) return;
-
-            const selectionIdx = selectedStripIndices.indexOf(index);
-            if (selectionIdx > -1) {
-                selectedStripIndices.splice(selectionIdx, 1);
-            } else {
-                if (selectedStripIndices.length < 2) {
-                    selectedStripIndices.push(index);
+                    if (sol[0] === selectedVals[0] && sol[1] === selectedVals[1]) {
+                        // Found a Sum cell that wants specific values matching ours.
+                        const pCell = prodMatches.find(p => p.pairId === sCell.pairId);
+                        if (pCell) {
+                            targetSumCell = sCell;
+                            targetProdCell = pCell;
+                            console.log("-> MATCH FOUND! This is the intended pair.");
+                            break;
+                        }
+                    } else {
+                        console.log("-> Value mismatch. Math works, but not the intended numbers for this specific cell.");
+                    }
                 }
-            }
 
-            render();
-
-            if (selectedStripIndices.length === 2) {
-                setTimeout(checkProPair, 300);
-            }
-        }
-
-        function checkProPair() {
-            if (selectedGridIndex === -1) return;
-
-            const idx1 = selectedStripIndices[0];
-            const idx2 = selectedStripIndices[1];
-            const val1 = stripValues[idx1].value;
-            const val2 = stripValues[idx2].value;
-
-            const targetCell = gridValues[selectedGridIndex];
-
-            // Validate
-            let isMatch = false;
-
-            if (targetCell.type === 'sum') {
-                if (val1 + val2 === targetCell.value) isMatch = true;
-            } else if (targetCell.type === 'product') {
-                if (val1 * val2 === targetCell.value) isMatch = true;
-            }
-
-            if (isMatch) {
-                targetCell.solved = true;
-
-                const partnerType = targetCell.type === 'sum' ? 'product' : 'sum';
-                const partnerCell = gridValues.find(g =>
-                    g.pairId === targetCell.pairId &&
-                    g.type === partnerType
-                );
-
-                if (partnerCell && partnerCell.solved) {
+                if (targetSumCell && targetProdCell) {
+                    // CORRECT SOLUTION (Intended)
+                    targetSumCell.solved = true;
+                    targetProdCell.solved = true;
                     stripValues[idx1].used = true;
                     stripValues[idx2].used = true;
+                    pairsFound += 2;
+
+                    calculateScore(false); // Normal Score
+                    selectedStripIndices = [];
+                    checkWin();
+                } else {
+                    // EXTRA SOLUTION (Ghost found!)
+                    console.log("-> No Exact Match found. Treating as Ghost/Extra Solution.");
+
+                    if (!foundExtraSolutions.has(pairHash)) {
+                        foundExtraSolutions.add(pairHash);
+                        showFloatingFeedback("¡Solución Extra! +50pts");
+                        calculateScore(true); // Bonus Score
+                    } else {
+                        showFloatingFeedback("Ya encontrada");
+                    }
+
+                    selectedStripIndices = [];
                 }
-
-                pairsFound++;
-
-                // In Pro mode, we calculate score per cell solved? 
-                // Or maybe half score? Let's just give points for progress.
-                calculateScore();
-
-                selectedGridIndex = -1;
-                selectedStripIndices = [];
-                checkWin();
-
             } else {
+                console.log("-> No Math matches found.");
                 handleMistake();
                 failFeedback();
-                selectedStripIndices = [];
             }
             render();
         }
 
-        // --- Scoring & Game Logic Helpers ---
-
-        function calculateScore() {
+        function calculateScore(isBonus) {
             const now = Date.now();
-            const timeTaken = (now - startTime) / 1000; // seconds
-            startTime = now; // Reset timer for next pair
+            const timeTaken = (now - startTime) / 1000;
+            startTime = now;
 
-            // Base Score per action
-            const basePoints = 100;
-
-            // Level Multiplier
             const multiplier = DIFFICULTY_RANGES[currentLevel].multi;
 
-            // Time Bonus: e.g. Max 50 bonus points, decreasing by 5 per second taken?
-            // If checking fast (within 5s) -> High bonus.
-            let timeBonus = Math.max(0, 50 - (timeTaken * 2));
-
-            const points = Math.round((basePoints + timeBonus) * multiplier);
-            currentRoundScore += points;
-
+            if (isBonus) {
+                // Fixed bonus for extra solutions
+                currentRoundScore += 50 * multiplier;
+            } else {
+                const basePoints = 100;
+                let timeBonus = Math.max(0, 50 - (timeTaken * 2));
+                currentRoundScore += Math.round((basePoints + timeBonus) * multiplier);
+            }
             updateUI();
         }
 
         function handleMistake() {
             mistakes++;
             updateUI();
-
             if (mistakes >= MAX_MISTAKES) {
                 setTimeout(() => {
                     alert("¡Juego Terminado! Has cometido 3 errores.");
-                    // Reset Score to 0
                     currentRoundScore = 0;
                     initGame();
                 }, 500);
@@ -389,9 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function checkWin() {
             if (gridValues.every(g => g.solved)) {
                 setTimeout(() => {
-                    // Update High Score ONLY on full panel completion
                     saveHighScore(currentRoundScore);
-
                     const modalParams = document.querySelector('.modal-content p');
                     if (modalParams) modalParams.textContent = `Has completado el tablero. Puntuación: ${currentRoundScore}`;
                     if (modal) modal.classList.remove('hidden');
@@ -404,7 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const currentHigh = parseInt(localStorage.getItem(key) || '0');
             if (score > currentHigh) {
                 localStorage.setItem(key, score);
-                loadHighScore(); // Refresh UI
+                loadHighScore();
             }
         }
 
@@ -425,19 +355,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 container.classList.add('shake');
                 setTimeout(() => container.classList.remove('shake'), 400);
             }
-
-            if (selectedGridIndex !== -1) {
-                const cells = document.querySelectorAll('.grid-cell');
-                if (cells[selectedGridIndex]) {
-                    cells[selectedGridIndex].classList.add('error');
-                    setTimeout(() => cells[selectedGridIndex].classList.remove('error'), 400);
-                }
-            }
-            // For standard mode, maybe shake the selected strip items?
-            // Already handled by container shake visually.
-
             selectedStripIndices = [];
             render();
+        }
+
+        function showFloatingFeedback(text) {
+            const feedback = document.createElement('div');
+            feedback.className = 'floating-feedback';
+            feedback.textContent = text;
+            document.body.appendChild(feedback);
+
+            // Position near the strip or center
+            // Let's just center it for now or make it fixed css
+
+            setTimeout(() => feedback.remove(), 1500);
         }
 
         function shuffleArray(array) {
@@ -448,7 +379,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return array;
         }
 
-        // Config Handlers
         diffBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 diffBtns.forEach(b => b.classList.remove('active'));
@@ -461,7 +391,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (newGameBtn) newGameBtn.addEventListener('click', initGame);
         if (modalRestartBtn) modalRestartBtn.addEventListener('click', initGame);
 
-        // Initial Start
         initGame();
 
     } catch (globalError) {

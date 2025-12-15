@@ -263,6 +263,7 @@ footer {
     color: var(--text-muted);
     font-size: 0.9rem;
     opacity: 0.6;
+    margin-top: 20px;
 }
 
 /* Modal */
@@ -285,6 +286,45 @@ footer {
 .modal.hidden {
     opacity: 0;
     pointer-events: none;
+}
+
+.floating-feedback {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: var(--accent-color);
+    color: white;
+    padding: 15px 30px;
+    border-radius: 50px;
+    font-weight: 800;
+    font-size: 1.5rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    z-index: 1000;
+    animation: floatUp 1.5s forwards;
+}
+
+@keyframes floatUp {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -40%);
+    }
+
+    20% {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+
+    80% {
+        opacity: 1;
+        transform: translate(-50%, -60%);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -80%);
+    }
 }
 
 .modal-content {
