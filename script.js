@@ -389,7 +389,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (newGameBtn) newGameBtn.addEventListener('click', initGame);
-        if (modalRestartBtn) modalRestartBtn.addEventListener('click', initGame);
+        if (modalRestartBtn) modalRestartBtn.addEventListener('click', () => {
+            if (modal) modal.classList.add('hidden');
+            initGame();
+        });
+
+        // Help Modal Logic
+        const helpBtn = document.getElementById('help-btn');
+        const helpModal = document.getElementById('help-modal');
+        const helpCloseBtn = document.getElementById('help-close-btn');
+
+        if (helpBtn && helpModal) {
+            helpBtn.addEventListener('click', () => {
+                helpModal.classList.remove('hidden');
+            });
+        }
+
+        if (helpCloseBtn && helpModal) {
+            helpCloseBtn.addEventListener('click', () => {
+                helpModal.classList.add('hidden');
+            });
+        }
+
+        // Close modals on outside click
+        window.onclick = function (event) {
+            if (event.target == helpModal) {
+                helpModal.classList.add('hidden');
+            }
+        }
 
         initGame();
 

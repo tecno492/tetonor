@@ -10,11 +10,16 @@
 <body>
     <div class="app-container">
         <header>
-            <h1>TETONOR</h1>
-            <p class="subtitle">Desafía tu mente. Encuentra los pares.</p>
+            <!-- The h1 and p.subtitle are moved/modified below -->
         </header>
 
         <main>
+            <div class="game-header">
+                <h1>Tetonor</h1>
+                <button id="help-btn" class="icon-btn" aria-label="Cómo jugar">?</button>
+            </div>
+            <p class="subtitle">Desafía tu mente. Encuentra los pares.</p>
+
             <div class="game-info">
                 <div class="stats-container">
                     <div class="stat-box">
@@ -67,6 +72,29 @@
             <h2>¡Felicidades!</h2>
             <p>Has completado el tablero.</p>
             <button id="modal-restart-btn" class="primary-btn">Jugar de Nuevo</button>
+        </div>
+    </div>
+
+    <div id="help-modal" class="modal hidden">
+        <div class="modal-content help-content">
+            <h2>Cómo Jugar</h2>
+            <ul>
+                <li><strong>Objetivo:</strong> Despejar el tablero encontrando pares de números.</li>
+                <li><strong>Mecánica:</strong> Selecciona 2 números de la tira inferior.</li>
+                <li><strong>Reglas:</strong>
+                    <ul>
+                        <li>La <strong>SUMA (+)</strong> y el <strong>PRODUCTO (×)</strong> de esos dos números deben estar libres en el tablero.</li>
+                        <li>Si coinciden con la solución exacta, se eliminan del tablero.</li>
+                    </ul>
+                </li>
+                <li><strong>Soluciones Fantasma:</strong>
+                    <ul>
+                        <li>Si encuentras un par que matemáticamente coincide con celdas libres pero NO son la solución exacta...</li>
+                        <li>¡Ganas <strong>Puntos Extra</strong> y conservas los números!</li>
+                    </ul>
+                </li>
+            </ul>
+            <button id="help-close-btn">Entendido</button>
         </div>
     </div>
 

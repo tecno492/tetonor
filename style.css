@@ -266,6 +266,35 @@ footer {
     margin-top: 20px;
 }
 
+.icon-btn {
+    background: none;
+    border: 2px solid var(--text-color);
+    color: var(--text-color);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 15px;
+}
+
+.icon-btn:hover {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.game-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
 /* Modal */
 .modal {
     position: fixed;
@@ -274,13 +303,44 @@ footer {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(5px);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 100;
+    z-index: 200;
+    backdrop-filter: blur(5px);
     opacity: 1;
     transition: opacity 0.3s;
+}
+
+.help-content {
+    text-align: left;
+    max-width: 500px;
+}
+
+.help-content h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.help-content ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+.help-content li {
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+.help-content ul ul {
+    padding-left: 20px;
+    margin-top: 5px;
+    list-style-type: disc;
+}
+
+.help-content button {
+    display: block;
+    margin: 25px auto 0;
 }
 
 .modal.hidden {
