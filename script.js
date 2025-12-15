@@ -3,7 +3,9 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("Script loaded");
         const gridEl = document.getElementById('grid');
         const stripEl = document.getElementById('strip');
-        const scoreEl = document.getElementById('score');
+        const currentScoreEl = document.getElementById('current-score');
+        const highScoreEl = document.getElementById('high-score');
+        const mistakesEl = document.getElementById('mistakes');
         const newGameBtn = document.getElementById('new-game-btn');
         const modal = document.getElementById('modal');
         const modalRestartBtn = document.getElementById('modal-restart-btn');
@@ -14,23 +16,29 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        let gridValues = []; // Stores { value: number, solved: boolean, type: 'sum' | 'product', pairId: number }
-        let stripValues = []; // Stores { value: number, id: number, used: boolean }
+        let gridValues = [];
+        let stripValues = [];
         let selectedStripIndices = [];
+
+        // Game State
         let pairsFound = 0;
+        let currentRoundScore = 0; // Accumulated score for this round
+        let totalScore = 0; // Total score if we allowed multiple rounds (but requirements say "update when complete panel")
+        // We will use this to track the "pending" score that gets committed to High Score?
+        let mistakes = 0;
+        let startTime = 0; // Timestamp when pair selection started (or game started)
 
         // Game Config
-        let currentLevel = 'easy'; // easy, medium, hard, pro
+        let currentLevel = 'easy';
         const TOTAL_PAIRS = 8;
-
-        // Pro Mode State
-        let selectedGridIndex = -1; // Index of the grid cell clicked in Pro mode
+        let selectedGridIndex = -1;
+        const MAX_MISTAKES = 3;
 
         const DIFFICULTY_RANGES = {
-            'easy': { min: 1, max: 9 },
-            'medium': { min: 2, max: 20 },
-            'hard': { min: 5, max: 50 },
-            'pro': { min: 5, max: 50 }
+            'easy': { min: 1, max: 15, multi: 1 },
+            'medium': { min: 1, max: 20, multi: 2 },
+            'hard': { min: 1, max: 50, multi: 3 },
+            'pro': { min: 1, max: 50, multi: 3.5 }
         };
 
         function initGame() {
@@ -42,66 +50,125 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedStripIndices = [];
                 selectedGridIndex = -1;
                 pairsFound = 0;
-                updateScore();
+                currentRoundScore = 0;
+                mistakes = 0;
+
+                updateUI();
                 if (modal) modal.classList.add('hidden');
 
-                // Remove input modal if exists
                 const oldInputModal = document.getElementById('pro-input-modal');
                 if (oldInputModal) oldInputModal.remove();
 
                 const range = DIFFICULTY_RANGES[currentLevel];
                 if (!range) throw new Error("Invalid level config: " + currentLevel);
 
+                // Load High Score
+                loadHighScore();
+
                 console.log("Generating Pairs for level:", currentLevel, range);
 
-                // Generate Puzzle
-                const pairs = [];
+                // Generate Puzzle with Smart Repair Strategy
+                gridValues = [];
+                stripValues = [];
+                let attempts = 0;
+                let currentPairs = [];
+
+                // Initial generation
                 for (let i = 0; i < TOTAL_PAIRS; i++) {
-                    const a = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
-                    const b = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
-                    pairs.push([a, b, i]);
+                    currentPairs.push(generateRandomPair(range, i));
                 }
 
-                // Generate Grid Items
-                const gridItems = [];
-                pairs.forEach(pair => {
-                    const [a, b, id] = pair;
-                    gridItems.push({
-                        value: a + b,
-                        solved: false,
-                        type: 'sum',
-                        pairId: id,
-                        solution: [a, b]
+                while (attempts < 1000000) {
+                    attempts++;
+
+                    // Build temporary structures for validation
+                    const tempGrid = [];
+                    const tempStrip = [];
+
+                    currentPairs.forEach(pair => {
+                        const [a, b, id] = pair;
+                        tempGrid.push({ value: a + b, type: 'sum', pairId: id, solved: false });
+                        tempGrid.push({ value: a * b, type: 'product', pairId: id, solved: false });
+                        tempStrip.push({ value: a, pairId: id, used: false, id: tempStrip.length });
+                        tempStrip.push({ value: b, pairId: id, used: false, id: tempStrip.length + 1 });
                     });
-                    gridItems.push({
-                        value: a * b,
-                        solved: false,
-                        type: 'product',
-                        pairId: id,
-                        solution: [a, b]
-                    });
-                });
 
-                // Shuffle Grid Items
-                gridValues = shuffleArray(gridItems);
+                    // Validate
+                    const conflictPairIds = findConflicts(tempStrip, tempGrid);
 
-                // Generate Strip Items
-                const stripItems = [];
-                pairs.forEach(pair => {
-                    const [a, b, id] = pair;
-                    stripItems.push({ value: a, pairId: id, used: false });
-                    stripItems.push({ value: b, pairId: id, used: false });
-                });
+                    if (conflictPairIds.length === 0) {
+                        // Success!
+                        console.log(`Puzzle Generated successfully after ${attempts} repairs.`);
+                        gridValues = shuffleArray(tempGrid);
+                        tempStrip.sort((x, y) => x.value - y.value);
+                        stripValues = tempStrip;
+                        break;
+                    }
 
-                stripItems.sort((x, y) => x.value - y.value);
-                stripValues = stripItems;
+                    // Repair: Replace ONE of the conflicting pairs
+                    // Pick the first conflicting pair ID
+                    const badId = conflictPairIds[0];
+                    const index = currentPairs.findIndex(p => p[2] === badId);
+                    if (index !== -1) {
+                        currentPairs[index] = generateRandomPair(range, badId);
+                    }
+                }
+
+                if (gridValues.length === 0) {
+                    // Fallback: If strict validation fails (unlikely with 500 repairs), 
+                    // just use what we have but warn. Or maybe reduce pair count?
+                    // Let's just throw for now, but 500 iterations should be plenty.
+                    throw new Error("Could not generate a unique layout. Please try again.");
+                }
 
                 console.log("Render calling...", gridValues.length, stripValues.length);
+                startTime = Date.now();
                 render();
             } catch (e) {
                 console.error("Error in initGame:", e);
                 alert("Game Error: " + e.message);
             }
+        }
+
+        function generateRandomPair(range, id) {
+            const a = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
+            const b = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
+            return [a, b, id];
+        }
+
+        function findConflicts(strip, grid) {
+            // Returns a list of pairIds that are causing conflicts (ghost solutions)
+            const conflicts = new Set();
+
+            for (let i = 0; i < strip.length; i++) {
+                for (let j = i + 1; j < strip.length; j++) {
+                    const item1 = strip[i];
+                    const item2 = strip[j];
+
+                    if (item1.pairId === item2.pairId) continue;
+
+                    const sum = item1.value + item2.value;
+                    const prod = item1.value * item2.value;
+
+                    const hasSum = grid.some(g => g.value === sum && g.type === 'sum');
+                    const hasProd = grid.some(g => g.value === prod && g.type === 'product');
+
+                    if (hasSum && hasProd) {
+                        // Conflict found involves these two items.
+                        // Mark BOTH pairs as problematic.
+                        conflicts.add(item1.pairId);
+                        conflicts.add(item2.pairId);
+                        // We can return early if we just want to fix one at a time
+                        return Array.from(conflicts);
+                    }
+                }
+            }
+            return Array.from(conflicts);
+        }
+
+        function unused_validatePuzzle(strip, grid) {
+            // ... deprecated ...
+            return true;
         }
 
         function render() {
@@ -134,21 +201,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.className = className;
                 btn.textContent = item.value;
 
-                // In Pro Mode, clicking strip items might not do anything unless we drag/drop, OR 
-                // maybe we use the strip to populate the inputs?
-                // Let's stick to Standard Mode behavior: user clicks 2 strip items.
-                // But Pro Mode requires selecting specific Grid Cell first? 
-                // No, the requirement says "manual entries".
-                // Let's implement: Click Grid Cell -> Dialog to enter 2 numbers -> Validation.
-                // For now, let's keep strip clickable only for Standard modes.
-
                 if (currentLevel !== 'pro') {
                     btn.onclick = () => handleStripClick(index);
                 } else {
-                    // In Pro mode, maybe clicking strip just highlights it?
-                    // Or actually, let's allow "Click Grid Cell, Then Click 2 Strip Items" flow for Pro?
-                    // That feels like "Manual Entry" but using the UI.
-                    // Steps: 1. Click Grid Cell (target). 2. Select 2 numbers from strip. 3. Check.
                     btn.onclick = () => handleProStripClick(index);
                 }
 
@@ -190,15 +245,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const prodMatches = gridValues.filter(g => !g.solved && g.value === prod && g.type === 'product');
 
             if (sumMatches.length > 0 && prodMatches.length > 0) {
+                // Correct Match
                 sumMatches[0].solved = true;
                 prodMatches[0].solved = true;
                 stripValues[idx1].used = true;
                 stripValues[idx2].used = true;
-                pairsFound += 2;
-                updateScore();
+                pairsFound += 2; // Tracking solved cells (16 total)
+
+                calculateScore();
+
                 selectedStripIndices = [];
                 checkWin();
             } else {
+                handleMistake();
                 failFeedback();
             }
             render();
@@ -218,7 +277,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function handleProStripClick(index) {
             if (selectedGridIndex === -1) {
-                // User hasn't selected a target grid cell yet
                 alert("En modo Pro, primero selecciona una casilla del tablero.");
                 return;
             }
@@ -260,53 +318,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (isMatch) {
-                // But wait, in Pro mode, finding ONE cell isn't enough?
-                // "Manual entries" usually implies you fill the grid.
-                // If I say "This 12 is 3x4", I am solving the 12. 
-                // Should I also auto-solve the corresponding Sum (7)?
-                // The user prompt said: "quadricula que require entradas manuales".
-                // Let's assume verifying just this specific cell is enough for "Manual Entry".
-                // OR: Standard Tetonor rules: checking a pair verifies BOTH.
-                // Let's stick to: You identify the pair for this Number.
-                // BUT, if you identify (3,4) for 12, you implicitly found the pair.
-
-                // Check if the OTHER matching pair part exists in grid and is unsolved?
-                // Actually, if I match 12 with 3 and 4, I effectively "used" 3 and 4.
-                // So I should solve both standardly?
-                // Let's say Pro mode just forces you to be EXPLICIT about which cell you are solving.
-                // Standard: Pick 2 numbers -> System finds where they go.
-                // Pro: Pick Cell -> Pick 2 numbers -> System verifies.
-
                 targetCell.solved = true;
 
-                // Should we mark the numbers as used?
-                // If we mark them used, then we can't solve the corresponding pair (e.g. sum)?
-                // Tetonor rule: "Each pair used twice".
-                // So 3 and 4 are used for 12 AND 7.
-                // So if I solve 12 with 3,4... 3 and 4 are NOT fully used yet?
-                // Logic change needed for Tetonor correctness:
-                // Strip numbers are used ONCE per PAIR of operations? 
-                // "Each pair of numbers ... used twice: once for add, once for mult".
-                // This implies the strip pair (3,4) is "consumed" only after BOTH 12 and 7 are found.
-
-                // My Standard logic was: Pick 3,4 -> Find 12 & 7 -> Mark 3,4 used.
-                // Pro logic: Pick 12 -> Pick 3,4 -> Solve 12. 
-                // 3,4 are now "Half Used"?
-                // Simplifying: In Pro mode, maybe we just mark the Cell as solved. 
-                // We only mark Strip as used when BOTH associated Grid Cells are solved?
-                // Let's try to find the pairID.
-
-                // Let's stick to this simplified Pro Logic:
-                // 1. Solve Target Cell.
-                // 2. Check if the "Partner" cell is also solved? 
-                //    If yes -> Mark strip numbers used.
-                //    If no -> Keep strip numbers available.
-
-                // Finding the partner cell is tricky because duplicates exist.
-                // But we can check if there are OTHER grid cells that use these exact two values?
-                // Actually, let's just use the `pairId` I added to the data structure!
-
-                // targetCell.pairId
                 const partnerType = targetCell.type === 'sum' ? 'product' : 'sum';
                 const partnerCell = gridValues.find(g =>
                     g.pairId === targetCell.pairId &&
@@ -314,50 +327,96 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
 
                 if (partnerCell && partnerCell.solved) {
-                    // Both parts of the pair are now solved!
                     stripValues[idx1].used = true;
                     stripValues[idx2].used = true;
-                } else {
-                    // Only one part solved. Just deselect strip items, don't mark used.
-                    // Visual aid: Maybe show them as "partially used"? (Scope creep)
                 }
 
-                // Also, we need to handle the case where user picked 3,4 for a 12 (solved), 
-                // but then picks 3,4 for a DIFFERENT 12? (Unlikely with random gen but possible).
-                // Strict check: numbers must match targetCell.solution
-                // I added `solution` field in INIT.
+                pairsFound++;
 
-                // Let's re-verify solution just to be safe they didn't pick coincidental numbers?
-                // (e.g. 2+6 = 8, 3+5=8. Target 8. Solution was 2,6. User picked 3,5. Valid?
-                // In logic puzzles, ANY valid math path is usually accepted unless strict unicity is required.
-                // Let's accept any valid math.
+                // In Pro mode, we calculate score per cell solved? 
+                // Or maybe half score? Let's just give points for progress.
+                calculateScore();
 
-                pairsFound++; // Increments by 1 in Pro mode (per cell)
-                updateScore();
                 selectedGridIndex = -1;
                 selectedStripIndices = [];
                 checkWin();
 
             } else {
+                handleMistake();
                 failFeedback();
-                // Deselect everything
                 selectedStripIndices = [];
             }
             render();
         }
 
-        // --- Helpers ---
+        // --- Scoring & Game Logic Helpers ---
+
+        function calculateScore() {
+            const now = Date.now();
+            const timeTaken = (now - startTime) / 1000; // seconds
+            startTime = now; // Reset timer for next pair
+
+            // Base Score per action
+            const basePoints = 100;
+
+            // Level Multiplier
+            const multiplier = DIFFICULTY_RANGES[currentLevel].multi;
+
+            // Time Bonus: e.g. Max 50 bonus points, decreasing by 5 per second taken?
+            // If checking fast (within 5s) -> High bonus.
+            let timeBonus = Math.max(0, 50 - (timeTaken * 2));
+
+            const points = Math.round((basePoints + timeBonus) * multiplier);
+            currentRoundScore += points;
+
+            updateUI();
+        }
+
+        function handleMistake() {
+            mistakes++;
+            updateUI();
+
+            if (mistakes >= MAX_MISTAKES) {
+                setTimeout(() => {
+                    alert("¡Juego Terminado! Has cometido 3 errores.");
+                    // Reset Score to 0
+                    currentRoundScore = 0;
+                    initGame();
+                }, 500);
+            }
+        }
 
         function checkWin() {
-            // Total pairs found in Standard = 16 (incremented by 2).
-            // In Pro, we increment by 1. Total grid cells = 16.
             if (gridValues.every(g => g.solved)) {
                 setTimeout(() => {
+                    // Update High Score ONLY on full panel completion
+                    saveHighScore(currentRoundScore);
+
                     const modalParams = document.querySelector('.modal-content p');
-                    if (modalParams) modalParams.textContent = "Has completado el tablero.";
+                    if (modalParams) modalParams.textContent = `Has completado el tablero. Puntuación: ${currentRoundScore}`;
                     if (modal) modal.classList.remove('hidden');
                 }, 500);
             }
+        }
+
+        function saveHighScore(score) {
+            const key = `tetonor_highscore_${currentLevel}`;
+            const currentHigh = parseInt(localStorage.getItem(key) || '0');
+            if (score > currentHigh) {
+                localStorage.setItem(key, score);
+                loadHighScore(); // Refresh UI
+            }
+        }
+
+        function loadHighScore() {
+            const key = `tetonor_highscore_${currentLevel}`;
+            const high = localStorage.getItem(key) || '0';
+            if (highScoreEl) highScoreEl.textContent = high;
+        }
+
+        function updateUI() {
+            if (currentScoreEl) currentScoreEl.textContent = currentRoundScore;
+            if (mistakesEl) mistakesEl.textContent = `${mistakes}/${MAX_MISTAKES}`;
         }
 
         function failFeedback() {
@@ -368,20 +427,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (selectedGridIndex !== -1) {
-                // In pro mode, maybe shake specific cell?
                 const cells = document.querySelectorAll('.grid-cell');
                 if (cells[selectedGridIndex]) {
                     cells[selectedGridIndex].classList.add('error');
                     setTimeout(() => cells[selectedGridIndex].classList.remove('error'), 400);
                 }
             }
+            // For standard mode, maybe shake the selected strip items?
+            // Already handled by container shake visually.
 
             selectedStripIndices = [];
-            render(); // clear selection
-        }
-
-        function updateScore() {
-            if (scoreEl) scoreEl.textContent = pairsFound;
+            render();
         }
 
         function shuffleArray(array) {

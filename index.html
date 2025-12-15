@@ -16,9 +16,21 @@
 
         <main>
             <div class="game-info">
-                <div class="score-board">
-                    <span>Pares Encontrados: <strong id="score">0</strong>/16</span>
+                <div class="stats-container">
+                    <div class="stat-box">
+                        <span class="stat-label">PUNTOS</span>
+                        <span id="current-score" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">RECORD</span>
+                        <span id="high-score" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">FALLOS</span>
+                        <span id="mistakes" class="stat-value">0/3</span>
+                    </div>
                 </div>
+                <!-- <div class="score-board">... removed old ...</div> -->
                 <button id="new-game-btn" class="primary-btn">Nuevo Juego</button>
             </div>
 

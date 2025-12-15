@@ -34,7 +34,7 @@ body {
     max-width: 600px;
     display: flex;
     flex-direction: column;
-    gap: 30px;
+    gap: 20px;
 }
 
 header {
@@ -61,7 +61,32 @@ h1 {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 10px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 16px;
+}
+
+.stats-container {
+    display: flex;
+    gap: 20px;
+}
+
+.stat-box {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+}
+
+.stat-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-color);
 }
 
 .primary-btn {
@@ -88,10 +113,13 @@ h1 {
 .difficulty-container {
     display: flex;
     justify-content: center;
-    gap: 10px;
+    gap: 5px;
+    /* Tighter gap */
     background: rgba(255, 255, 255, 0.05);
     padding: 5px;
     border-radius: 50px;
+    flex-wrap: wrap;
+    /* Allow wrapping on small screens */
 }
 
 .diff-btn {
@@ -104,6 +132,7 @@ h1 {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
+    font-size: 0.9rem;
 }
 
 .diff-btn:hover {
@@ -275,30 +304,6 @@ footer {
     -webkit-text-fill-color: transparent;
 }
 
-/* Modal Inputs for Pro Mode */
-.input-modal {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-    margin: 20px 0;
-}
-
-.num-input {
-    width: 60px;
-    height: 60px;
-    font-size: 1.5rem;
-    text-align: center;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    border-radius: 8px;
-}
-
-.num-input:focus {
-    outline: none;
-    border-color: var(--primary-color);
-}
-
 @media (max-width: 480px) {
     .h1 {
         font-size: 2rem;
@@ -315,6 +320,18 @@ footer {
     .strip-item {
         width: 40px;
         height: 40px;
+        font-size: 1rem;
+    }
+
+    .stats-container {
+        gap: 10px;
+    }
+
+    .stat-label {
+        font-size: 0.6rem;
+    }
+
+    .stat-value {
         font-size: 1rem;
     }
 }
