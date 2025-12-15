@@ -223,65 +223,72 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`Calculated -> Sum: ${sum}, Product: ${prod}`);
             console.log("Current Grid State:", JSON.parse(JSON.stringify(gridValues)));
 
-            // Find Grid cells that match the math
-            const sumMatches = gridValues.filter(g => !g.solved && g.value === sum && g.type === 'sum');
-            const prodMatches = gridValues.filter(g => !g.solved && g.value === prod && g.type === 'product');
+            // Find Loose Matches (Value Only) - For Ghost Solutions
+            const looseSumMatches = gridValues.filter(g => !g.solved && g.value === sum);
+            const looseProdMatches = gridValues.filter(g => !g.solved && g.value === prod);
 
-            console.log("Math Matches (Sum):", sumMatches);
-            console.log("Math Matches (Product):", prodMatches);
+            // Find Exact Matches (Value + Type) - For Correct Solutions
+            const exactSumMatches = gridValues.filter(g => !g.solved && g.value === sum && g.type === 'sum');
+            const exactProdMatches = gridValues.filter(g => !g.solved && g.value === prod && g.type === 'product');
 
-            if (sumMatches.length > 0 && prodMatches.length > 0) {
-                // Math is valid. Now check if it's the "Intended" solution for any of these cells.
+            console.log("Loose Matches -> Sum:", looseSumMatches.length, "Prod:", looseProdMatches.length);
+            console.log("Exact Matches -> Sum:", exactSumMatches.length, "Prod:", exactProdMatches.length);
 
-                let targetSumCell = null;
-                let targetProdCell = null;
+            let targetSumCell = null;
+            let targetProdCell = null;
 
-                // Find a matching pair where the solution matches our values
-                for (const sCell of sumMatches) {
+            // Check for Perfect Intended Match
+            if (exactSumMatches.length > 0 && exactProdMatches.length > 0) {
+                for (const sCell of exactSumMatches) {
                     const sol = [...sCell.solution].sort((a, b) => a - b);
-                    console.log(`Checking Sum Cell [${sCell.value}]: Expects [${sol.join(',')}] vs Selected [${selectedVals.join(',')}]`);
-
                     if (sol[0] === selectedVals[0] && sol[1] === selectedVals[1]) {
                         // Found a Sum cell that wants specific values matching ours.
-                        const pCell = prodMatches.find(p => p.pairId === sCell.pairId);
+                        const pCell = exactProdMatches.find(p => p.pairId === sCell.pairId);
                         if (pCell) {
                             targetSumCell = sCell;
                             targetProdCell = pCell;
-                            console.log("-> MATCH FOUND! This is the intended pair.");
+                            console.log("-> EXACT MATCH FOUND!");
                             break;
                         }
-                    } else {
-                        console.log("-> Value mismatch. Math works, but not the intended numbers for this specific cell.");
                     }
                 }
+            }
 
-                if (targetSumCell && targetProdCell) {
-                    // CORRECT SOLUTION (Intended)
-                    targetSumCell.solved = true;
-                    targetProdCell.solved = true;
-                    stripValues[idx1].used = true;
-                    stripValues[idx2].used = true;
-                    pairsFound += 2;
+            // Ghost Logic Validation:
+            // If Sum == Prod (e.g. 2+2=4, 2*2=4), we need DISTINCT cells for them.
+            // Since looseSumMatches and looseProdMatches would be identical lists,
+            // we check if we have at least 2 items in the list.
+            const hasEnoughCells = (sum === prod)
+                ? (looseSumMatches.length >= 2)
+                : (looseSumMatches.length > 0 && looseProdMatches.length > 0);
 
-                    calculateScore(false); // Normal Score
-                    selectedStripIndices = [];
-                    checkWin();
+            if (targetSumCell && targetProdCell) {
+                // CORRECT SOLUTION (Intended)
+                targetSumCell.solved = true;
+                targetProdCell.solved = true;
+                stripValues[idx1].used = true;
+                stripValues[idx2].used = true;
+                pairsFound += 2;
+
+                calculateScore(false); // Normal Score
+                selectedStripIndices = [];
+                checkWin();
+            } else if (hasEnoughCells) {
+                // EXTRA SOLUTION (Ghost found!)
+                console.log("-> Loose Match found (Ghost/Extra).");
+
+                if (!foundExtraSolutions.has(pairHash)) {
+                    foundExtraSolutions.add(pairHash);
+                    showFloatingFeedback("¡Solución Extra! +50pts");
+                    calculateScore(true); // Bonus Score
                 } else {
-                    // EXTRA SOLUTION (Ghost found!)
-                    console.log("-> No Exact Match found. Treating as Ghost/Extra Solution.");
-
-                    if (!foundExtraSolutions.has(pairHash)) {
-                        foundExtraSolutions.add(pairHash);
-                        showFloatingFeedback("¡Solución Extra! +50pts");
-                        calculateScore(true); // Bonus Score
-                    } else {
-                        showFloatingFeedback("Ya encontrada");
-                    }
-
-                    selectedStripIndices = [];
+                    showFloatingFeedback("Ya encontrada");
                 }
+
+                selectedStripIndices = [];
             } else {
-                console.log("-> No Math matches found.");
+                // Not a match logic
+                console.log("-> No matches found.");
                 handleMistake();
                 failFeedback();
             }
