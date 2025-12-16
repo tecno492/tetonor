@@ -49,7 +49,7 @@ app.get('/api/rankings/:level', (req, res) => {
     });
 });
 
-// Submit Score
+// Submit Score (Update if higher)
 app.post('/api/score', (req, res) => {
     const { name, score, level } = req.body;
 
@@ -58,18 +58,41 @@ app.post('/api/score', (req, res) => {
         return;
     }
 
-    const sql = `INSERT INTO scores (name, score, level) VALUES (?, ?, ?)`;
-    const params = [name, score, level];
+    // Check if user already has a score for this level
+    const checkSql = `SELECT id, score FROM scores WHERE name = ? AND level = ?`;
 
-    db.run(sql, params, function (err) {
+    db.get(checkSql, [name, level], (err, row) => {
         if (err) {
-            res.status(400).json({ error: err.message });
+            res.status(500).json({ error: err.message });
             return;
         }
-        res.json({
-            message: "success",
-            id: this.lastID
-        });
+
+        if (row) {
+            // User exists, update ONLY if new score is higher
+            if (score > row.score) {
+                const updateSql = `UPDATE scores SET score = ?, date = CURRENT_TIMESTAMP WHERE id = ?`;
+                db.run(updateSql, [score, row.id], function (err) {
+                    if (err) {
+                        res.status(500).json({ error: err.message });
+                        return;
+                    }
+                    res.json({ message: "Score updated", id: row.id, improved: true });
+                });
+            } else {
+                // New score is not higher, ignore
+                res.json({ message: "Score not higher, kept previous", id: row.id, improved: false });
+            }
+        } else {
+            // New user for this level, insert
+            const insertSql = `INSERT INTO scores (name, score, level) VALUES (?, ?, ?)`;
+            db.run(insertSql, [name, score, level], function (err) {
+                if (err) {
+                    res.status(500).json({ error: err.message });
+                    return;
+                }
+                res.json({ message: "New score created", id: this.lastID, improved: true });
+            });
+        }
     });
 });
 
