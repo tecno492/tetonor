@@ -11,6 +11,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const modalRestartBtn = document.getElementById('modal-restart-btn');
         const diffBtns = document.querySelectorAll('.diff-btn');
 
+        // Modal Elements
+        const regModal = document.getElementById('registration-modal');
+        const playerNameInput = document.getElementById('player-name-input');
+        const savePlayerBtn = document.getElementById('save-player-btn');
+
+        const leaderboardBtn = document.getElementById('leaderboard-btn');
+        const leaderboardModal = document.getElementById('leaderboard-modal');
+        const leaderboardCloseBtn = document.getElementById('leaderboard-close-btn');
+        const leaderboardBody = document.getElementById('leaderboard-body');
+        const tabBtns = document.querySelectorAll('.tab-btn');
+
+
         if (!gridEl || !stripEl) {
             alert("Critical Error: Grid or Strip elements not found!");
             return;
@@ -58,6 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Load High Score
                 loadHighScore();
+
+                // Check Registration
+                checkRegistration();
 
                 console.log("Generating Pairs for level:", currentLevel, range);
 
@@ -329,6 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (gridValues.every(g => g.solved)) {
                 setTimeout(() => {
                     saveHighScore(currentRoundScore);
+                    submitScore(currentRoundScore); // Automatic Submission
                     const modalParams = document.querySelector('.modal-content p');
                     if (modalParams) modalParams.textContent = `Has completado el tablero. Puntuación: ${currentRoundScore}`;
                     if (modal) modal.classList.remove('hidden');
@@ -418,11 +434,94 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // Leaderboard Logic
+        if (leaderboardBtn) {
+            leaderboardBtn.addEventListener('click', () => {
+                leaderboardModal.classList.remove('hidden');
+                loadLeaderboard(currentLevel);
+            });
+        }
+
+        if (leaderboardCloseBtn) {
+            leaderboardCloseBtn.addEventListener('click', () => {
+                leaderboardModal.classList.add('hidden');
+            });
+        }
+
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tabBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const level = btn.dataset.tab;
+                loadLeaderboard(level);
+            });
+        });
+
+        // Registration Logic
+        if (savePlayerBtn) {
+            savePlayerBtn.addEventListener('click', () => {
+                const name = playerNameInput.value.trim();
+                if (name.length < 3) {
+                    alert("El nombre debe tener al menos 3 caracteres.");
+                    return;
+                }
+                localStorage.setItem('tetonor_player_name', name);
+                regModal.classList.add('hidden');
+            });
+        }
+
+        function checkRegistration() {
+            const name = localStorage.getItem('tetonor_player_name');
+            if (!name && regModal) {
+                regModal.classList.remove('hidden');
+            }
+        }
+
+        function submitScore(score) {
+            const name = localStorage.getItem('tetonor_player_name');
+            if (!name) return; // Should allow manual entry? Logic says we forced it at start.
+
+            fetch('/api/score', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, score, level: currentLevel })
+            })
+                .then(res => res.json())
+                .then(data => console.log("Score submitted:", data))
+                .catch(err => console.error("Error submitting score:", err));
+        }
+
+        function loadLeaderboard(level) {
+            leaderboardBody.innerHTML = '<tr><td colspan="3">Cargando...</td></tr>';
+
+            fetch(`/api/rankings/${level}`)
+                .then(res => res.json())
+                .then(response => {
+                    leaderboardBody.innerHTML = '';
+                    if (response.data && response.data.length > 0) {
+                        response.data.forEach((row, index) => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>${index + 1}</td>
+                                <td>${row.name}</td>
+                                <td>${row.score}</td>
+                            `;
+                            leaderboardBody.appendChild(tr);
+                        });
+                    } else {
+                        leaderboardBody.innerHTML = '<tr><td colspan="3">Aún no hay puntuaciones.</td></tr>';
+                    }
+                })
+                .catch(err => {
+                    leaderboardBody.innerHTML = '<tr><td colspan="3">Error al cargar ranking.</td></tr>';
+                    console.error(err);
+                });
+        }
+
         // Close modals on outside click
         window.onclick = function (event) {
-            if (event.target == helpModal) {
-                helpModal.classList.add('hidden');
-            }
+            if (event.target == helpModal) helpModal.classList.add('hidden');
+            if (event.target == leaderboardModal) leaderboardModal.classList.add('hidden');
         }
 
         initGame();
